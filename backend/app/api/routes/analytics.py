@@ -64,9 +64,22 @@ async def get_forecast(current_user=Depends(get_current_user)) -> dict[str, Any]
 async def get_trends(current_user=Depends(get_current_user)) -> dict[str, Any]:
     """Return time-series data of resources, violations, and waste per scan."""
     history = _build_scan_history()
+
+    # Aggregate violation breakdowns across all completed scans
+    vio_by_type: dict[str, int] = {}
+    vio_by_sev: dict[str, int] = {}
+    for h in history:
+        for v in store.scan_violations.get(h["scan_id"], []):
+            rtype = v.get("resource_type", "Unknown")
+            sev = v.get("severity", "LOW")
+            vio_by_type[rtype] = vio_by_type.get(rtype, 0) + 1
+            vio_by_sev[sev] = vio_by_sev.get(sev, 0) + 1
+
     return {
         "scan_count": len(history),
         "series": history,
+        "violation_by_type": vio_by_type,
+        "violation_by_severity": vio_by_sev,
         "summary": {
             "avg_monthly_waste": round(
                 sum(h["total_monthly_waste"] for h in history) / max(len(history), 1), 2

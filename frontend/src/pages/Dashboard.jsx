@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { getSettings } from '../services/settingsService'
 import apiClient from '../services/apiClient'
+import ErrorBoundary from '../components/common/ErrorBoundary'
 
 // Component imports
 import EC2Table from '../components/resources/EC2Table'
@@ -261,71 +262,73 @@ export default function Dashboard() {
 
                             {/* Compliance + Risk inline banner */}
                             {(complianceData || riskData) && (
-                                <div style={{
-                                    display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap',
-                                }}>
-                                    {complianceData && (() => {
-                                        const score = complianceData.overall_score ?? 0
-                                        const color = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'
-                                        return (
-                                            <div onClick={() => navigate('/compliance')} style={{
-                                                flex: 1, minWidth: 220, cursor: 'pointer',
-                                                background: 'rgba(255,255,255,0.04)',
-                                                border: `1px solid ${color}44`,
-                                                borderRadius: 12, padding: '14px 18px',
-                                                display: 'flex', alignItems: 'center', gap: 14,
-                                                transition: 'border-color 0.2s',
-                                            }}>
-                                                <ShieldCheck size={26} color={color} />
-                                                <div>
-                                                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>COMPLIANCE SCORE</div>
-                                                    <div style={{ fontSize: 22, fontWeight: 800, color }}>{score}%</div>
-                                                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
-                                                        {complianceData.critical_violations ?? 0} critical violations
+                                <ErrorBoundary>
+                                    <div style={{
+                                        display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap',
+                                    }}>
+                                        {complianceData && (() => {
+                                            const score = complianceData.overall_score ?? 0
+                                            const color = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'
+                                            return (
+                                                <div onClick={() => navigate('/compliance')} style={{
+                                                    flex: 1, minWidth: 220, cursor: 'pointer',
+                                                    background: 'rgba(255,255,255,0.04)',
+                                                    border: `1px solid ${color}44`,
+                                                    borderRadius: 12, padding: '14px 18px',
+                                                    display: 'flex', alignItems: 'center', gap: 14,
+                                                    transition: 'border-color 0.2s',
+                                                }}>
+                                                    <ShieldCheck size={26} color={color} />
+                                                    <div>
+                                                        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>COMPLIANCE SCORE</div>
+                                                        <div style={{ fontSize: 22, fontWeight: 800, color }}>{score}%</div>
+                                                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                                                            {complianceData.critical_violations ?? 0} critical violations
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ marginLeft: 'auto', fontSize: 11, color: '#6366f1' }}>View details →</div>
+                                                </div>
+                                            )
+                                        })()}
+                                        {riskData && (() => {
+                                            const lvl = riskData.risk_level || 'UNKNOWN'
+                                            const riskColors = { CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#f59e0b', LOW: '#3b82f6', SAFE: '#10b981' }
+                                            const color = riskColors[lvl] || '#6b7280'
+                                            return (
+                                                <div style={{
+                                                    flex: 1, minWidth: 220,
+                                                    background: 'rgba(255,255,255,0.04)',
+                                                    border: `1px solid ${color}44`,
+                                                    borderRadius: 12, padding: '14px 18px',
+                                                    display: 'flex', alignItems: 'center', gap: 14,
+                                                }}>
+                                                    <Shield size={26} color={color} />
+                                                    <div>
+                                                        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>RISK SCORE</div>
+                                                        <div style={{ fontSize: 22, fontWeight: 800, color }}>{riskData.overall_risk_score ?? 0}</div>
+                                                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                                                            {lvl} risk · {riskData.resource_count ?? 0} resources
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div style={{ marginLeft: 'auto', fontSize: 11, color: '#6366f1' }}>View details →</div>
-                                            </div>
-                                        )
-                                    })()}
-                                    {riskData && (() => {
-                                        const lvl = riskData.risk_level || 'UNKNOWN'
-                                        const riskColors = { CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#f59e0b', LOW: '#3b82f6', SAFE: '#10b981' }
-                                        const color = riskColors[lvl] || '#6b7280'
-                                        return (
-                                            <div style={{
-                                                flex: 1, minWidth: 220,
-                                                background: 'rgba(255,255,255,0.04)',
-                                                border: `1px solid ${color}44`,
-                                                borderRadius: 12, padding: '14px 18px',
-                                                display: 'flex', alignItems: 'center', gap: 14,
+                                            )
+                                        })()}
+                                        {lastScan && (
+                                            <button onClick={handleDownloadPdf} disabled={pdfLoading} style={{
+                                                display: 'flex', alignItems: 'center', gap: 8,
+                                                padding: '14px 20px', borderRadius: 12, cursor: 'pointer',
+                                                background: pdfLoading ? 'rgba(255,255,255,0.04)' : 'rgba(99,102,241,0.1)',
+                                                border: '1px solid rgba(99,102,241,0.3)',
+                                                color: pdfLoading ? '#64748b' : '#818cf8',
+                                                fontWeight: 600, fontSize: 13,
+                                                transition: 'all 0.2s',
                                             }}>
-                                                <Shield size={26} color={color} />
-                                                <div>
-                                                    <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>RISK SCORE</div>
-                                                    <div style={{ fontSize: 22, fontWeight: 800, color }}>{riskData.overall_risk_score ?? 0}</div>
-                                                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
-                                                        {lvl} risk · {riskData.resource_count ?? 0} resources
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })()}
-                                    {lastScan && (
-                                        <button onClick={handleDownloadPdf} disabled={pdfLoading} style={{
-                                            display: 'flex', alignItems: 'center', gap: 8,
-                                            padding: '14px 20px', borderRadius: 12, cursor: 'pointer',
-                                            background: pdfLoading ? 'rgba(255,255,255,0.04)' : 'rgba(99,102,241,0.1)',
-                                            border: '1px solid rgba(99,102,241,0.3)',
-                                            color: pdfLoading ? '#64748b' : '#818cf8',
-                                            fontWeight: 600, fontSize: 13,
-                                            transition: 'all 0.2s',
-                                        }}>
-                                            <FileDown size={18} />
-                                            {pdfLoading ? 'Generating…' : 'Download PDF Report'}
-                                        </button>
-                                    )}
-                                </div>
+                                                <FileDown size={18} />
+                                                {pdfLoading ? 'Generating…' : 'Download PDF Report'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </ErrorBoundary>
                             )}
 
                             {/* Cost intelligence summary */}

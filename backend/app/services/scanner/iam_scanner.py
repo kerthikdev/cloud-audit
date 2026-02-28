@@ -30,12 +30,13 @@ def _mock_iam(region: str) -> list[dict[str, Any]]:
         has_wildcard_policy = random.random() > 0.6
         items.append({
             "resource_id": f"arn:aws:iam::123456789012:user/{uname}",
-            "resource_type": "IAMUser",
+            "resource_type": "IAM",
             "region": "global",
             "name": uname,
             "state": "active",
             "tags": {},
             "raw_data": {
+                "resource_subtype": "user",
                 "username": uname,
                 "has_console_access": has_console_access,
                 "has_mfa": has_mfa,
@@ -44,17 +45,19 @@ def _mock_iam(region: str) -> list[dict[str, Any]]:
                 "has_wildcard_policy": has_wildcard_policy,
                 "num_access_keys": random.randint(0, 2),
                 "groups": [f"group-{i % 3}"],
+                "is_root": False,
             },
         })
     # Add one root activity record
     items.append({
         "resource_id": "arn:aws:iam::123456789012:root",
-        "resource_type": "IAMRoot",
+        "resource_type": "IAM",
         "region": "global",
         "name": "root",
         "state": "active",
         "tags": {},
         "raw_data": {
+            "resource_subtype": "root",
             "username": "root",
             "has_mfa": random.random() > 0.3,
             "last_activity_days": random.choice([0, 30, 90, 200]),
@@ -144,12 +147,13 @@ def scan_iam(region: str) -> list[dict[str, Any]]:
 
             items.append({
                 "resource_id": f"arn:aws:iam::root:user/{uname}" if not is_root else "arn:aws:iam::root",
-                "resource_type": "IAMRoot" if is_root else "IAMUser",
+                "resource_type": "IAM",
                 "region": "global",
                 "name": uname,
                 "state": "active",
                 "tags": {},
                 "raw_data": {
+                    "resource_subtype": "root" if is_root else "user",
                     "username": uname,
                     "has_console_access": row.get("password_enabled") == "true",
                     "has_mfa": row.get("mfa_active") == "true",

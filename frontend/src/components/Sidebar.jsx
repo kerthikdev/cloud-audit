@@ -1,14 +1,19 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Zap, BarChart2, History, LogOut, ShieldCheck, TrendingUp } from 'lucide-react'
+import {
+    LayoutDashboard, Settings, Zap, BarChart2, History, LogOut,
+    ShieldCheck, GitCompare, Wrench,
+} from 'lucide-react'
 import { getUser, logout } from '../services/authService'
 
 const NAV = [
     { to: '/', label: 'Resources', icon: LayoutDashboard, end: true },
-    { to: '/recommendations', label: 'Recommendations', icon: Zap, end: false },
-    { to: '/compliance', label: 'Compliance', icon: ShieldCheck, end: false },
-    { to: '/analytics', label: 'Analytics', icon: TrendingUp, end: false },
-    { to: '/history', label: 'History', icon: History, end: false },
-    { to: '/settings', label: 'Settings', icon: Settings, end: false },
+    { to: '/recommendations', label: 'Recommendations', icon: Zap },
+    { to: '/remediation', label: 'Remediation', icon: Wrench },
+    { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
+    { to: '/analytics', label: 'Analytics', icon: BarChart2 },
+    { to: '/diff', label: 'Scan Diff', icon: GitCompare },
+    { to: '/history', label: 'History', icon: History },
+    { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Sidebar() {
@@ -20,7 +25,7 @@ export default function Sidebar() {
                 <div className="sidebar-logo-icon">☁</div>
                 <div>
                     <div className="sidebar-logo-text">CloudAudit</div>
-                    <div className="sidebar-logo-sub">Resource Inventory</div>
+                    <div className="sidebar-logo-sub">v4.0 · Tier 5</div>
                 </div>
             </div>
 

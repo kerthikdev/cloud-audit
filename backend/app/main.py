@@ -42,6 +42,9 @@ from app.api.routes import audit, health, settings as settings_route
 from app.api.routes.auth import router as auth_router
 from app.api.routes.users import router as users_router
 from app.api.routes.analytics import router as analytics_router
+from app.api.routes.diff import router as diff_router
+from app.api.routes.remediation import router as remediation_router
+from app.api.routes.tags import router as tags_router
 
 app.include_router(health.router)
 app.include_router(auth_router, prefix="/api/v1")
@@ -49,6 +52,9 @@ app.include_router(audit.router, prefix="/api/v1")
 app.include_router(settings_route.router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(diff_router, prefix="/api/v1")
+app.include_router(remediation_router, prefix="/api/v1")
+app.include_router(tags_router, prefix="/api/v1")
 
 
 # ── Startup / Shutdown ────────────────────────────────────────────────────────

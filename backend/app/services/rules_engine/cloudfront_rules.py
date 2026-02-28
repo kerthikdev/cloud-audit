@@ -79,26 +79,31 @@ def evaluate_cloudwatch_rules(resource: dict[str, Any]) -> list[dict[str, Any]]:
     violations = []
     raw = resource.get("raw_data", {})
     rid = resource["resource_id"]
-    rtype = resource.get("resource_type", "")
+    rtype = resource.get("resource_type", "CloudWatch")
     region = resource.get("region", "us-east-1")
 
-    if rtype == "LogGroup":
+    # Differentiate log groups from alarms via resource_subtype (set by scanner)
+    subtype = raw.get("resource_subtype", "")
+    is_log_group = subtype == "log_group" or raw.get("retention_days") is not None
+    is_alarm = subtype == "alarm" or "alarm_name" in raw
+
+    if is_log_group:
         name = raw.get("log_group_name", rid)
         size_mb = raw.get("size_mb", 0)
 
         # CW-001: No retention policy — unbounded log storage cost
-        if not raw.get("has_retention", False):
+        if not raw.get("has_retention", False) and raw.get("retention_days") is None:
             cost_est = round(size_mb / 1024 * 0.03 * 12, 2)  # $0.03/GB/month annualized
             violations.append({
                 "rule_id": "CW-001",
                 "severity": "MEDIUM",
-                "message": f"Log group '{name}' has no retention policy. Current size: {size_mb}MB. Logs accumulate indefinitely.",
-                "recommendation": f"Set a retention policy (7–90 days). Estimated annual savings: ~${cost_est}.",
+                "message": f"Log group '{name}' has no retention policy. Size: {size_mb}MB. Logs accumulate indefinitely.",
+                "recommendation": f"Set retention (7–90 days). Estimated annual savings: ~${cost_est}.",
                 "compliance_framework": "FinOps",
                 "resource_id": rid, "resource_type": rtype, "region": region,
             })
 
-    elif rtype == "CloudWatchAlarm":
+    if is_alarm:
         name = raw.get("alarm_name", rid)
         state = raw.get("state", "OK")
         last_change = raw.get("last_state_change_days", 0)
@@ -108,8 +113,8 @@ def evaluate_cloudwatch_rules(resource: dict[str, Any]) -> list[dict[str, Any]]:
             violations.append({
                 "rule_id": "CW-002",
                 "severity": "HIGH",
-                "message": f"Alarm '{name}' has been in INSUFFICIENT_DATA state for {last_change} days — metric may be misconfigured.",
-                "recommendation": "Review alarm configuration: verify metric namespace, dimensions, and data availability.",
+                "message": f"Alarm '{name}' has been in INSUFFICIENT_DATA for {last_change} days — metric may be misconfigured.",
+                "recommendation": "Review alarm config: verify metric namespace, dimensions, and data availability.",
                 "compliance_framework": "Governance",
                 "resource_id": rid, "resource_type": rtype, "region": region,
             })
@@ -120,7 +125,7 @@ def evaluate_cloudwatch_rules(resource: dict[str, Any]) -> list[dict[str, Any]]:
                 "rule_id": "CW-003",
                 "severity": "LOW",
                 "message": f"Alarm '{name}' has no actions configured — alerts will never be sent.",
-                "recommendation": "Add SNS notification or Auto Scaling action to the alarm so it triggers on state change.",
+                "recommendation": "Add SNS or Auto Scaling action to the alarm so it triggers on state change.",
                 "compliance_framework": "Governance",
                 "resource_id": rid, "resource_type": rtype, "region": region,
             })

@@ -35,12 +35,13 @@ def _mock_cloudwatch(region: str) -> list[dict[str, Any]]:
         size_mb = random.randint(10, 50_000)
         items.append({
             "resource_id": f"log-group:{region}:{lg}",
-            "resource_type": "LogGroup",
+            "resource_type": "CloudWatch",
             "region": region,
             "name": lg,
             "state": "active",
             "tags": {},
             "raw_data": {
+                "resource_subtype": "log_group",
                 "log_group_name": lg,
                 "retention_days": random.choice([7, 14, 30, 60, 90, 180]) if has_retention else None,
                 "has_retention": has_retention,
@@ -53,12 +54,13 @@ def _mock_cloudwatch(region: str) -> list[dict[str, Any]]:
         state = random.choice(["OK", "ALARM", "INSUFFICIENT_DATA", "INSUFFICIENT_DATA", "OK"])
         items.append({
             "resource_id": f"alarm:{region}:{aname}",
-            "resource_type": "CloudWatchAlarm",
+            "resource_type": "CloudWatch",
             "region": region,
             "name": aname,
             "state": state,
             "tags": {},
             "raw_data": {
+                "resource_subtype": "alarm",
                 "alarm_name": aname,
                 "state": state,
                 "metric_name": aname.replace("-alarm", "").replace("-", "_"),
@@ -97,12 +99,13 @@ def scan_cloudwatch(region: str) -> list[dict[str, Any]]:
                 size_bytes = lg.get("storedBytes", 0)
                 items.append({
                     "resource_id": f"log-group:{region}:{name}",
-                    "resource_type": "LogGroup",
+                    "resource_type": "CloudWatch",
                     "region": region,
                     "name": name,
                     "state": "active",
                     "tags": {},
                     "raw_data": {
+                        "resource_subtype": "log_group",
                         "log_group_name": name,
                         "retention_days": ret,
                         "has_retention": ret is not None,
@@ -122,12 +125,13 @@ def scan_cloudwatch(region: str) -> list[dict[str, Any]]:
                 last_change_days = (now - lsc.replace(tzinfo=timezone.utc)).days if lsc else 0
                 items.append({
                     "resource_id": f"alarm:{region}:{alarm['AlarmName']}",
-                    "resource_type": "CloudWatchAlarm",
+                    "resource_type": "CloudWatch",
                     "region": region,
                     "name": alarm["AlarmName"],
                     "state": state,
                     "tags": {},
                     "raw_data": {
+                        "resource_subtype": "alarm",
                         "alarm_name": alarm["AlarmName"],
                         "state": state,
                         "metric_name": alarm.get("MetricName", ""),

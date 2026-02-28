@@ -68,6 +68,9 @@ SCANNERS = {
 # IAM and CloudFront are global — only scan once per run, not per region
 _GLOBAL_SCANNERS = {"IAM", "CloudFront"}
 
+# Track running scans to prevent duplicates
+_active_scans: set[str] = set()  # scan_ids currently running
+
 
 class ScanRequest(BaseModel):
     regions: list[str] = ["us-east-1"]
@@ -359,6 +362,19 @@ async def trigger_scan(
     background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
 ):
+    # Deduplication: block if a scan is already pending/running
+    running = [
+        s for s in store.scan_sessions.values()
+        if s.get("status") in ("pending", "running")
+    ]
+    if running:
+        active = running[0]
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=409,
+            detail=f"A scan is already {active['status']} (id: {active['id'][:8]}). Wait for it to complete.",
+        )
+
     scan_id = str(uuid.uuid4())
     rtypes = payload.resource_types or list(SCANNERS.keys())
     store.scan_sessions[scan_id] = {
