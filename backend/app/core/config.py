@@ -39,8 +39,11 @@ class Settings(BaseSettings):
     # Scanner
     scan_regions: str = "us-east-1,us-west-2"
 
-    # Database
-    db_url: str = "sqlite:///./scan_data.db"
+    # Database — MongoDB
+    # Use MongoDB Atlas: mongodb+srv://user:pass@cluster.mongodb.net/
+    # Or local: mongodb://localhost:27017
+    mongodb_uri: str = "mongodb://localhost:27017"
+    mongodb_db_name: str = "cloudaudit"
 
     # Scheduling
     schedule_cron: str = ""          # e.g. "0 */6 * * *" — empty = disabled

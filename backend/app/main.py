@@ -1,5 +1,5 @@
 """
-FastAPI application entry point.
+FastAPI application entry point — v4.0.0 with MongoDB user store.
 """
 from __future__ import annotations
 
@@ -9,8 +9,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.database import init_db
-from app.services.scheduler import start_scheduler, stop_scheduler
 
 settings = get_settings()
 
@@ -23,7 +21,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Cloud Resource Audit Platform",
     description="Multi-region AWS Resource Audit Engine with FinOps Analytics",
-    version="2.0.0",
+    version="4.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -60,53 +58,33 @@ app.include_router(tags_router, prefix="/api/v1")
 # ── Startup / Shutdown ────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting Cloud Resource Audit Platform v2.0.0")
-    init_db()
-    _upgrade_viewer_users_to_admin()
+    logger.info("Starting Cloud Resource Audit Platform v4.0.0")
+    from app.core.database import init_db
+    from app.services.scheduler import start_scheduler
+    await init_db()
     start_scheduler()
     _load_historical_sessions()
-    logger.info("Startup complete")
+    logger.info("Startup complete — MongoDB connected, scheduler running")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    from app.core.database import close_db
+    from app.services.scheduler import stop_scheduler
     stop_scheduler()
+    await close_db()
     logger.info("Shutdown complete")
-
-
-def _upgrade_viewer_users_to_admin():
-    """One-time migration: promote all viewer-role users to admin."""
-    try:
-        from app.core.database import SessionLocal
-        from app.models.user import User
-        db = SessionLocal()
-        viewers = db.query(User).filter(User.role == "viewer").all()
-        if viewers:
-            for u in viewers:
-                u.role = "admin"
-            db.commit()
-            logger.info(f"Upgraded {len(viewers)} viewer user(s) to admin")
-        db.close()
-    except Exception as e:
-        logger.warning(f"Could not upgrade viewer users: {e}")
 
 
 def _load_historical_sessions():
     """Load recent scan sessions from DB into in-memory store on startup."""
     try:
-        from app.core.database import SessionLocal
-        from app.models.scan import ScanSession
-        from app.core import store
-
-        db = SessionLocal()
-        sessions = db.query(ScanSession).order_by(ScanSession.started_at.desc()).limit(50).all()
-        for s in sessions:
-            if s.id not in store.scan_sessions:
-                store.scan_sessions[s.id] = s.to_dict()
-        db.close()
-        logger.info(f"Loaded {len(sessions)} historical scan sessions from DB")
+        from app.core.database import get_db as mongo_db
+        # Scan data remains in-memory store — this function is for backwards compat
+        # The in-memory store resets on restart (by design for MVP)
+        logger.info("In-memory scan store ready")
     except Exception as e:
-        logger.warning(f"Could not load historical sessions: {e}")
+        logger.warning(f"Could not initialize store: {e}")
 
 
 # ── Version Endpoint ──────────────────────────────────────────────────────────
@@ -114,12 +92,15 @@ def _load_historical_sessions():
 async def version():
     s = get_settings()
     return {
-        "version": "3.0.0",
+        "version": "4.0.0",
         "app_env": s.app_env,
         "mock_aws": s.mock_aws,
+        "db": "mongodb",
         "features": [
-            "parallel_scanning", "sqlite_persistence", "jwt_auth", "scheduler", "slack_alerts",
-            "compliance_scoring", "risk_engine", "cost_forecasting", "pdf_reports",
+            "parallel_scanning", "mongodb_auth", "jwt_auth", "scheduler", "slack_alerts",
+            "compliance_scoring", "risk_engine", "cost_forecasting",
             "lambda_scanning", "iam_scanning", "cloudfront_scanning", "cloudwatch_scanning",
+            "search_filter", "pagination", "scan_dedup", "jwt_refresh", "error_boundaries",
+            "scan_diff", "remediation_engine", "tag_cost_allocation",
         ],
     }

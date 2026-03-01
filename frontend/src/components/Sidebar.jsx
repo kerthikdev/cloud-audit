@@ -1,23 +1,26 @@
 import { NavLink } from 'react-router-dom'
 import {
     LayoutDashboard, Settings, Zap, BarChart2, History, LogOut,
-    ShieldCheck, GitCompare, Wrench,
+    ShieldCheck, GitCompare, Wrench, Users,
 } from 'lucide-react'
 import { getUser, logout } from '../services/authService'
 
-const NAV = [
-    { to: '/', label: 'Resources', icon: LayoutDashboard, end: true },
-    { to: '/recommendations', label: 'Recommendations', icon: Zap },
-    { to: '/remediation', label: 'Remediation', icon: Wrench },
-    { to: '/compliance', label: 'Compliance', icon: ShieldCheck },
-    { to: '/analytics', label: 'Analytics', icon: BarChart2 },
-    { to: '/diff', label: 'Scan Diff', icon: GitCompare },
-    { to: '/history', label: 'History', icon: History },
-    { to: '/settings', label: 'Settings', icon: Settings },
-]
+function NavItem({ to, label, icon: Icon, end }) {
+    return (
+        <NavLink
+            to={to}
+            end={end}
+            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+        >
+            <Icon size={17} />
+            {label}
+        </NavLink>
+    )
+}
 
 export default function Sidebar() {
     const user = getUser()
+    const isAdmin = user?.role === 'admin'
 
     return (
         <aside className="sidebar">
@@ -30,27 +33,31 @@ export default function Sidebar() {
             </div>
 
             <nav className="sidebar-nav">
-                {NAV.map(({ to, label, icon: Icon, end }) => (
-                    <NavLink
-                        key={to}
-                        to={to}
-                        end={end}
-                        className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-                    >
-                        <Icon size={17} />
-                        {label}
-                    </NavLink>
-                ))}
+                <NavItem to="/" label="Resources" icon={LayoutDashboard} end />
+                <NavItem to="/recommendations" label="Recommendations" icon={Zap} />
+                <NavItem to="/remediation" label="Remediation" icon={Wrench} />
+                <NavItem to="/compliance" label="Compliance" icon={ShieldCheck} />
+                <NavItem to="/analytics" label="Analytics" icon={BarChart2} />
+                <NavItem to="/diff" label="Scan Diff" icon={GitCompare} />
+                <NavItem to="/history" label="History" icon={History} />
+                {/* Users management — shown for all, but API enforces admin-only */}
+                {isAdmin && <NavItem to="/users" label="Users" icon={Users} />}
+                <NavItem to="/settings" label="Settings" icon={Settings} />
             </nav>
 
             {/* User info + logout at bottom */}
             <div style={{ marginTop: 'auto', padding: '1rem', borderTop: '1px solid var(--border)' }}>
                 {user && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-                        Signed in as <strong style={{ color: 'var(--text)' }}>{user.username}</strong>
-                        {user.role === 'admin' && (
-                            <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(99,102,241,0.15)', color: 'var(--accent)', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>ADMIN</span>
-                        )}
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                        <div>Signed in as <strong style={{ color: 'var(--text)' }}>{user.username}</strong></div>
+                        <div style={{ marginTop: 4 }}>
+                            <span style={{
+                                fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
+                                padding: '2px 7px', borderRadius: 4,
+                                background: user.role === 'admin' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)',
+                                color: user.role === 'admin' ? '#818cf8' : '#34d399',
+                            }}>{user.role}</span>
+                        </div>
                     </div>
                 )}
                 <button onClick={logout} style={{

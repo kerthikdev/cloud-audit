@@ -8,6 +8,7 @@ import Compliance from './pages/Compliance'
 import History from './pages/History'
 import ScanDiff from './pages/ScanDiff'
 import Remediation from './pages/Remediation'
+import Users from './pages/Users'
 import Login from './pages/Login'
 import { isAuthenticated } from './services/authService'
 
@@ -25,6 +26,7 @@ function ProtectedLayout() {
                     <Route path="/history" element={<History />} />
                     <Route path="/diff" element={<ScanDiff />} />
                     <Route path="/remediation" element={<Remediation />} />
+                    <Route path="/users" element={<Users />} />
                     <Route path="/settings" element={<Settings />} />
                 </Routes>
             </main>

@@ -9,14 +9,9 @@ from typing import Any, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from app.core import store
-from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.scan import (
-    CostRecord, Recommendation, Resource, ScanSession, Violation,
-)
 from app.services.alerting import send_critical_alerts
 from app.services.cost_engine.cost_explorer import get_cost_data
 from app.services.governance.encryption_checks import check_encryption
@@ -139,7 +134,7 @@ def _scan_region_type(region: str, rtype: str, scanner_fn) -> tuple[list, list]:
     return resources_out, violations_out
 
 
-# ── DB persistence helper ─────────────────────────────────────────────────────
+# ── Persistence helper ────────────────────────────────────────────────────────
 
 def _persist_scan_to_db(
     scan_id: str,
@@ -149,92 +144,12 @@ def _persist_scan_to_db(
     cost_data: list,
     recs: list,
 ) -> None:
-    """Write completed scan data to SQLite."""
-    try:
-        from app.core.database import SessionLocal
-        db = SessionLocal()
-        try:
-            # Upsert ScanSession
-            db_session = db.query(ScanSession).filter(ScanSession.id == scan_id).first()
-            if not db_session:
-                db_session = ScanSession(id=scan_id)
-                db.add(db_session)
-
-            db_session.status = session_data["status"]
-            db_session.regions = ",".join(session_data.get("regions", []))
-            db_session.resource_types = ",".join(session_data.get("resource_types", []))
-            db_session.started_at = datetime.fromisoformat(session_data["started_at"])
-            if session_data.get("completed_at"):
-                db_session.completed_at = datetime.fromisoformat(session_data["completed_at"])
-            db_session.resource_count = session_data.get("resource_count", 0)
-            db_session.violation_count = session_data.get("violation_count", 0)
-            db_session.error = session_data.get("error")
-            db.flush()
-
-            # Resources
-            for r in all_resources:
-                db_r = Resource(
-                    id=r.get("id", str(uuid.uuid4())),
-                    scan_id=scan_id,
-                    resource_id=r["resource_id"],
-                    resource_type=r["resource_type"],
-                    region=r["region"],
-                    name=r.get("name"),
-                    state=r.get("state"),
-                    risk_score=r.get("risk_score", 0),
-                    violation_count=r.get("violation_count", 0),
-                    tags=r.get("tags", {}),
-                    raw_data=r.get("raw_data", {}),
-                )
-                db.add(db_r)
-
-            # Violations
-            for v in all_violations:
-                db_v = Violation(
-                    id=v.get("id", str(uuid.uuid4())),
-                    scan_id=scan_id,
-                    resource_id=v["resource_id"],
-                    resource_type=v["resource_type"],
-                    region=v["region"],
-                    rule_id=v["rule_id"],
-                    severity=v["severity"],
-                    message=v["message"],
-                    remediation=v.get("remediation", ""),
-                )
-                db.add(db_v)
-
-            # Cost records (store as single JSON blob)
-            if cost_data:
-                db.add(CostRecord(scan_id=scan_id, data=cost_data))
-
-            # Recommendations
-            for rec in recs:
-                db_rec = Recommendation(
-                    id=rec.get("id", str(uuid.uuid4())),
-                    scan_id=scan_id,
-                    category=rec.get("category", ""),
-                    rule_id=rec.get("rule_id", ""),
-                    resource_id=rec.get("resource_id", ""),
-                    resource_type=rec.get("resource_type", ""),
-                    region=rec.get("region", ""),
-                    title=rec.get("title", ""),
-                    description=rec.get("description", ""),
-                    action=rec.get("action", ""),
-                    estimated_monthly_savings=rec.get("estimated_monthly_savings", 0.0),
-                    confidence=rec.get("confidence", "LOW"),
-                    severity=rec.get("severity", "LOW"),
-                )
-                db.add(db_rec)
-
-            db.commit()
-            logger.info(f"Scan {scan_id} persisted to DB")
-        except Exception as e:
-            db.rollback()
-            logger.error(f"DB persist failed for scan {scan_id}: {e}")
-        finally:
-            db.close()
-    except Exception as e:
-        logger.error(f"Could not open DB session: {e}")
+    """
+    All scan data is stored in the in-memory store (store.py) during _run_scan.
+    The store module auto-saves to scan_data.json for persistence across restarts.
+    This function is kept for interface compatibility.
+    """
+    logger.debug(f"Scan {scan_id}: data lives in in-memory store ({len(all_resources)} resources, {len(all_violations)} violations)")
 
 
 # ── Background scan task ──────────────────────────────────────────────────────
@@ -386,7 +301,7 @@ async def trigger_scan(
         "completed_at": None,
         "resource_count": 0,
         "violation_count": 0,
-        "triggered_by": f"user:{current_user.username}",
+        "triggered_by": f"user:{current_user['username']}",
     }
     background_tasks.add_task(_run_scan, scan_id, payload.regions, rtypes)
     return {"scan_id": scan_id, "status": "pending", "message": "Scan started"}
@@ -394,39 +309,18 @@ async def trigger_scan(
 
 @router.get("")
 async def list_scans(
-    db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Merge in-memory (pending/running) with DB (completed/historical)
-    from app.models.scan import ScanSession as DBSession
-    db_scans = db.query(DBSession).order_by(DBSession.started_at.desc()).all()
-    db_ids = {s.id for s in db_scans}
-
-    # In-memory scans not yet in DB (still running/pending)
-    live_scans = [
-        s for s in store.scan_sessions.values() if s["id"] not in db_ids
-    ]
-    all_sessions = [s.to_dict() for s in db_scans] + live_scans
-    all_sessions.sort(key=lambda s: s.get("started_at", ""), reverse=True)
-
-    return {"scans": all_sessions, "total": len(all_sessions)}
+    """Return all scan sessions from the in-memory store."""
+    sessions = list(store.scan_sessions.values())
+    sessions.sort(key=lambda s: s.get("started_at", ""), reverse=True)
+    return {"scans": sessions, "total": len(sessions)}
 
 
 @router.get("/{scan_id}")
 async def get_scan(scan_id: str, current_user=Depends(get_current_user)):
-    # Check live store first
     if scan_id in store.scan_sessions:
         return store.scan_sessions[scan_id]
-    # Fall back to DB
-    from app.core.database import SessionLocal
-    from app.models.scan import ScanSession as DBSession
-    db = SessionLocal()
-    try:
-        db_session = db.query(DBSession).filter(DBSession.id == scan_id).first()
-        if db_session:
-            return db_session.to_dict()
-    finally:
-        db.close()
     raise HTTPException(status_code=404, detail="Scan not found")
 
 
@@ -438,22 +332,11 @@ async def get_scan_resources(
     resource_type: Optional[str] = None,
     region: Optional[str] = None,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    # Try in-memory cache first (for fresh/running scans)
-    if scan_id in store.scan_resources and store.scan_resources[scan_id]:
-        resources = store.scan_resources[scan_id]
-    else:
-        # Load from DB
-        from app.models.scan import Resource as DBResource
-        query = db.query(DBResource).filter(DBResource.scan_id == scan_id)
-        resources = [r.to_dict() for r in query.all()]
+    if scan_id not in store.scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan not found")
 
-    if not resources and scan_id not in store.scan_sessions:
-        # Check DB for session
-        from app.models.scan import ScanSession as DBSession
-        if not db.query(DBSession).filter(DBSession.id == scan_id).first():
-            raise HTTPException(status_code=404, detail="Scan not found")
+    resources = store.scan_resources.get(scan_id, [])
 
     if resource_type:
         resources = [r for r in resources if r.get("resource_type") == resource_type]
@@ -480,13 +363,11 @@ async def get_scan_violations(
     page: int = 1,
     page_size: int = 500,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    if scan_id in store.scan_violations and store.scan_violations[scan_id]:
-        violations = store.scan_violations[scan_id]
-    else:
-        from app.models.scan import Violation as DBViolation
-        violations = [v.to_dict() for v in db.query(DBViolation).filter(DBViolation.scan_id == scan_id).all()]
+    if scan_id not in store.scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    violations = store.scan_violations.get(scan_id, [])
 
     if severity:
         violations = [v for v in violations if (v.get("severity") or "").upper() == severity.upper()]
@@ -518,17 +399,13 @@ async def get_scan_violations(
 async def get_scan_costs(
     scan_id: str,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     from app.services.cost_engine.cost_explorer import build_cost_summary
 
-    if scan_id in store.scan_costs:
-        cost_records = store.scan_costs[scan_id]
-    else:
-        from app.models.scan import CostRecord as DBCostRecord
-        cr = db.query(DBCostRecord).filter(DBCostRecord.scan_id == scan_id).first()
-        cost_records = cr.data if cr else []
+    if scan_id not in store.scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan not found")
 
+    cost_records = store.scan_costs.get(scan_id, [])
     violations = store.scan_violations.get(scan_id, [])
     summary = build_cost_summary(cost_records, violations=violations) if cost_records else {}
     return {"scan_id": scan_id, "records": cost_records, "summary": summary}
@@ -539,13 +416,11 @@ async def get_scan_recommendations(
     scan_id: str,
     category: Optional[str] = None,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    if scan_id in store.scan_recommendations and store.scan_recommendations[scan_id]:
-        recs = store.scan_recommendations[scan_id]
-    else:
-        from app.models.scan import Recommendation as DBRec
-        recs = [r.to_dict() for r in db.query(DBRec).filter(DBRec.scan_id == scan_id).all()]
+    if scan_id not in store.scan_sessions:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    recs = store.scan_recommendations.get(scan_id, [])
 
     if category:
         recs = [r for r in recs if r.get("category", "").lower() == category.lower()]
@@ -621,20 +496,10 @@ async def export_html_report(scan_id: str, current_user=Depends(get_current_user
 @router.get("/{scan_id}/compliance")
 async def get_scan_compliance(scan_id: str, current_user=Depends(get_current_user)):
     """Return compliance framework scores for a specific scan."""
-    # Try live store first
     if scan_id in store.scan_compliance:
         return {"scan_id": scan_id, **store.scan_compliance[scan_id]}
 
-    # Recompute from stored violations
     violations = store.scan_violations.get(scan_id, [])
-    if not violations:
-        from app.core.database import SessionLocal
-        from app.models.scan import Violation as DBViolation
-        db = SessionLocal()
-        try:
-            violations = [v.to_dict() for v in db.query(DBViolation).filter(DBViolation.scan_id == scan_id).all()]
-        finally:
-            db.close()
 
     if not violations and scan_id not in store.scan_sessions:
         raise HTTPException(status_code=404, detail="Scan not found")

@@ -1,13 +1,13 @@
 """
 Security utilities: JWT token creation/verification, password hashing.
-Uses Python stdlib (hashlib PBKDF2-SHA256) — no bcrypt/passlib dependency needed.
+Uses stdlib PBKDF2-SHA256 for password hashing — no bcrypt/passlib needed.
+Uses Motor (async MongoDB) for user lookup.
 """
 from __future__ import annotations
 
 import hashlib
 import hmac
 import logging
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -15,47 +15,35 @@ from typing import Any
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, APIKeyHeader
 from jose import JWTError, jwt
-from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-# FastAPI security schemes
 _bearer_scheme = HTTPBearer(auto_error=False)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-_ITERATIONS = 260_000   # NIST recommended for PBKDF2-SHA256 in 2024
+_ITERATIONS = 260_000
 
 
-# ── Password helpers (stdlib only — no bcrypt/passlib) ────────────────────────
+# ── Password helpers ──────────────────────────────────────────────────────────
 
 def hash_password(password: str) -> str:
-    """Hash password using PBKDF2-SHA256 with a random salt.
-    Format: pbkdf2:sha256:<iters>$<salt_hex>$<hash_hex>
-    """
+    """Hash with PBKDF2-SHA256. Format: pbkdf2:sha256:<iters>$<salt_hex>$<hash_hex>"""
     salt = secrets.token_hex(16)
-    dk = hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), salt.encode("utf-8"), _ITERATIONS
-    )
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), _ITERATIONS)
     return f"pbkdf2:sha256:{_ITERATIONS}${salt}${dk.hex()}"
 
 
 def verify_password(plain: str, stored: str) -> bool:
     """Verify a plaintext password against a stored PBKDF2 hash."""
     try:
-        algo_part, rest = stored.split(":", 1)
-        _algo, hash_name, iters_str = algo_part.split(":") if ":" in algo_part else ("pbkdf2", "sha256", str(_ITERATIONS))
-        # Handle format: pbkdf2:sha256:<iters>$<salt>$<hash>
         parts = stored.split("$")
         if len(parts) != 3:
             return False
         header, salt, stored_hash = parts
         iters = int(header.split(":")[-1])
-        dk = hashlib.pbkdf2_hmac(
-            "sha256", plain.encode("utf-8"), salt.encode("utf-8"), iters
-        )
+        dk = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt.encode(), iters)
         return hmac.compare_digest(dk.hex(), stored_hash)
     except Exception:
         return False
@@ -78,27 +66,24 @@ def decode_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
 
 
-# ── FastAPI dependency ────────────────────────────────────────────────────────
+# ── FastAPI dependency — async MongoDB lookup ─────────────────────────────────
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
     api_key: str | None = Security(_api_key_header),
-    db: Session = Depends(get_db),
-):
-    """Resolve current user from Bearer JWT or X-API-Key header."""
-    from app.models.user import User
+) -> dict[str, Any]:
+    """
+    Resolve current user from Bearer JWT or X-API-Key header.
+    Returns a dict with: username, role, email, is_active, _id (str)
+    """
+    from app.core.database import get_db
 
     settings = get_settings()
+    db = get_db()
 
     # API Key fast path
     if api_key and settings.api_key and api_key == settings.api_key:
-        user = db.query(User).filter(User.username == "api_key_user", User.is_active == True).first()
-        if not user:
-            user = User(username="api_key_user", hashed_password="", role="admin", is_active=True)
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        return user
+        return {"username": "api_key_user", "role": "admin", "email": None, "is_active": True, "_id": "api_key"}
 
     # JWT Bearer token
     if credentials:
@@ -106,15 +91,19 @@ def get_current_user(
             payload = decode_token(credentials.credentials)
             username: str = payload.get("sub", "")
             if not username:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-            user = db.query(User).filter(User.username == username, User.is_active == True).first()
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+            user = await db["users"].find_one({"username": username, "is_active": True})
             if not user:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+            user["_id"] = str(user["_id"])
             return user
+
         except JWTError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
+                detail="Could not validate credentials — token may have expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -125,8 +114,8 @@ def get_current_user(
     )
 
 
-def require_admin(current_user=Depends(get_current_user)):
+def require_admin(current_user: dict = Depends(get_current_user)):
     """Dependency that requires admin role."""
-    if current_user.role != "admin":
+    if current_user.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
     return current_user

@@ -1,79 +1,67 @@
 """
-SQLAlchemy database engine and session management.
-Uses SQLite by default (swappable to PostgreSQL via DB_URL env var).
+MongoDB connection module using Motor (async driver).
+Only the users collection lives in MongoDB.
+All scan, violation, and recommendation data stays in the in-memory store.
+
+Set MONGODB_URI in .env to your MongoDB Atlas connection string.
+Example:
+  MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/cloudaudit?retryWrites=true&w=majority
+
+If not set, falls back to localhost:27017.
 """
 from __future__ import annotations
 
 import logging
-from typing import Generator
+from typing import Any
 
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-
-class Base(DeclarativeBase):
-    pass
-
-
-import os as _os
-from pathlib import Path as _Path
-
-# The canonical data directory is always the backend/ folder (parent of app/)
-_BACKEND_DIR = _Path(__file__).resolve().parents[2]  # …/backend/
+_client: AsyncIOMotorClient | None = None
+_db: AsyncIOMotorDatabase | None = None
 
 
-def _resolve_db_url(url: str) -> str:
-    """Convert a relative sqlite:///./path to an absolute path so it never moves with CWD."""
-    if url.startswith("sqlite:///./") or url.startswith("sqlite:///.\\"):
-        rel_path = url[len("sqlite:///./"):]
-        abs_path = _BACKEND_DIR / rel_path
-        return f"sqlite:///{abs_path}"
-    return url
+def get_mongo_client() -> AsyncIOMotorClient:
+    global _client
+    if _client is None:
+        settings = get_settings()
+        uri = settings.mongodb_uri
+        _client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+        logger.info(f"MongoDB client created (uri prefix: {uri[:30]}…)")
+    return _client
 
 
-def _get_engine():
-    settings = get_settings()
-    db_url = _resolve_db_url(settings.db_url)  # always absolute path
-
-    if db_url.startswith("sqlite"):
-        engine = create_engine(
-            db_url,
-            connect_args={"check_same_thread": False},
-            pool_pre_ping=True,
-        )
-        # Enable WAL mode for SQLite — much better concurrent read performance
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_conn, _rec):
-            cursor = dbapi_conn.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
-    else:
-        engine = create_engine(db_url, pool_pre_ping=True, pool_size=10, max_overflow=20)
-
-    return engine
+def get_db() -> AsyncIOMotorDatabase:
+    global _db
+    if _db is None:
+        settings = get_settings()
+        _db = get_mongo_client()[settings.mongodb_db_name]
+    return _db
 
 
-engine = _get_engine()
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+async def init_db() -> None:
+    """
+    Create indexes on the users collection.
+    Called at application startup.
+    """
+    db = get_db()
+    users = db["users"]
+    await users.create_index("username", unique=True)
+    await users.create_index("email", sparse=True)
+    logger.info("MongoDB indexes created/verified on 'users' collection")
 
 
-def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency — yields a DB session and closes it after use."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def close_db() -> None:
+    global _client
+    if _client:
+        _client.close()
+        _client = None
+        logger.info("MongoDB client closed")
 
 
-def init_db() -> None:
-    """Create all tables. Called at application startup."""
-    # Import all models so SQLAlchemy registers them
-    from app.models import scan, user  # noqa: F401
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database initialized — tables created if not exist")
+async def user_count() -> int:
+    """Return the number of registered users."""
+    return await get_db()["users"].count_documents({})
