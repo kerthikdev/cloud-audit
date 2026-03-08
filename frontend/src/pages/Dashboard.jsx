@@ -23,6 +23,7 @@ import LambdaTable from '../components/resources/LambdaTable'
 import IAMTable from '../components/resources/IAMTable'
 import CloudFrontTable from '../components/resources/CloudFrontTable'
 import CloudWatchTable from '../components/resources/CloudWatchTable'
+import VPCTable from '../components/resources/VPCTable'
 import ViolationsPanel from '../components/violations/ViolationsPanel'
 import CostSummaryCard from '../components/cost/CostSummaryCard'
 import { Empty } from '../components/resources/shared'
@@ -59,6 +60,7 @@ const RESOURCE_TABS = [
     { key: 'IAM', label: 'IAM', icon: UserCheck, color: '#ef4444' },
     { key: 'CloudFront', label: 'CloudFront', icon: Cloud, color: '#0ea5e9' },
     { key: 'CloudWatch', label: 'CloudWatch', icon: Activity, color: '#10b981' },
+    { key: 'VPC', label: 'VPC', icon: Network, color: '#06b6d4' },
 ]
 
 const VIEW_TABS = [
@@ -401,6 +403,7 @@ export default function Dashboard() {
                                         {activeTab === 'IAM' && <IAMTable items={byType('IAM')} />}
                                         {activeTab === 'CloudFront' && <CloudFrontTable items={byType('CloudFront')} />}
                                         {activeTab === 'CloudWatch' && <CloudWatchTable items={byType('CloudWatch')} />}
+                                        {activeTab === 'VPC' && <VPCTable items={byType('VPC')} />}
                                     </div>
                                 )
                             )}
