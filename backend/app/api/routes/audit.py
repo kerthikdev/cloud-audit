@@ -26,6 +26,7 @@ from app.services.rules_engine.storage_rules import evaluate_storage_rules
 from app.services.rules_engine.lambda_rules import evaluate_lambda_rules
 from app.services.rules_engine.iam_rules import evaluate_iam_rules
 from app.services.rules_engine.cloudfront_rules import evaluate_cloudfront_rules, evaluate_cloudwatch_rules
+from app.services.rules_engine.vpc_rules import evaluate_vpc_rules
 from app.services.scanner.ebs_scanner import scan_ebs
 from app.services.scanner.ec2_scanner import scan_ec2
 from app.services.scanner.eip_scanner import scan_eip
@@ -38,6 +39,11 @@ from app.services.scanner.lambda_scanner import scan_lambda
 from app.services.scanner.iam_scanner import scan_iam
 from app.services.scanner.cloudfront_scanner import scan_cloudfront
 from app.services.scanner.cloudwatch_scanner import scan_cloudwatch
+from app.services.scanner.vpc_scanner import scan_vpc
+from app.services.scanner.dynamodb_scanner import scan_dynamodb
+from app.services.scanner.elasticache_scanner import scan_elasticache
+from app.services.scanner.route53_scanner import scan_route53
+from app.services.scanner.ecs_scanner import scan_ecs
 from app.services.recommendations import generate_recommendations
 from app.services.compliance_scorer import score_compliance
 from app.services.risk_engine import compute_scan_risk_score
@@ -58,10 +64,15 @@ SCANNERS = {
     "IAM":        scan_iam,
     "CloudFront": scan_cloudfront,
     "CloudWatch": scan_cloudwatch,
+    "VPC":        scan_vpc,
+    "DynamoDB":   scan_dynamodb,
+    "ElastiCache": scan_elasticache,
+    "Route53":    scan_route53,
+    "ECS":        scan_ecs,
 }
 
-# IAM and CloudFront are global — only scan once per run, not per region
-_GLOBAL_SCANNERS = {"IAM", "CloudFront"}
+# IAM, CloudFront, and Route53 are global — only scan once per run, not per region
+_GLOBAL_SCANNERS = {"IAM", "CloudFront", "Route53"}
 
 # Track running scans to prevent duplicates
 _active_scans: set[str] = set()  # scan_ids currently running
@@ -102,6 +113,10 @@ def _scan_region_type(region: str, rtype: str, scanner_fn) -> tuple[list, list]:
                 violations = evaluate_cloudfront_rules(r)
             elif rtype == "CloudWatch":
                 violations = evaluate_cloudwatch_rules(r)
+            elif rtype == "VPC":
+                violations = evaluate_vpc_rules(r)
+            elif rtype in {"DynamoDB", "ElastiCache", "Route53", "ECS"}:
+                violations = []  # No dedicated rules yet — clean by default
             else:
                 violations = evaluate_storage_rules(r)
 

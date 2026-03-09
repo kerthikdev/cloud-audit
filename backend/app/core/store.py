@@ -14,8 +14,13 @@ from typing import Any
 logger = logging.getLogger(__name__)
 _lock = threading.Lock()
 
-# Persist data next to this file in the backend directory
-_DATA_FILE = Path(__file__).parent.parent.parent.parent / "scan_data.json"
+# ── Persistence path ───────────────────────────────────────────
+# In Docker: DATA_DIR=/data (named volume, set in docker-compose.yml)
+# Local dev:  no DATA_DIR set  →  falls back to repo root (same as before)
+import os as _os
+_DATA_DIR = Path(_os.environ.get("DATA_DIR", "")).resolve() if _os.environ.get("DATA_DIR") else \
+            Path(__file__).parent.parent.parent.parent
+_DATA_FILE = _DATA_DIR / "scan_data.json"
 
 # ── In-memory stores ───────────────────────────────────────────
 scan_sessions: dict[str, dict[str, Any]] = {}

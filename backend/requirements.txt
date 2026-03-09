@@ -9,7 +9,7 @@ python-multipart==0.0.12
 
 # Database — MongoDB (cloud Atlas or local)
 motor==3.6.0
-pymongo==4.10.1
+pymongo==4.9.2
 
 # Auth
 python-jose[cryptography]==3.3.0

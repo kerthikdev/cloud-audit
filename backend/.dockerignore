@@ -1,0 +1,40 @@
+# Python cache and byte-code
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Pytest / test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+*.egg-info/
+
+# SQLite leftovers (migrated to MongoDB)
+*.db
+*.db-shm
+*.db-wal
+
+# Local dev files
+.env
+.env.*
+!.env.example
+
+# Development scan snapshots (rebuild inside container)
+scan_data.json
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Git
+.git/
+.gitignore

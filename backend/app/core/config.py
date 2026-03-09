@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # Database — MongoDB
     # Use MongoDB Atlas: mongodb+srv://user:pass@cluster.mongodb.net/
     # Or local: mongodb://localhost:27017
-    mongodb_uri: str = "mongodb://localhost:27017"
+    mongodb_uri: str = "mongodb+srv://admin:admin@mongo.s2gflbj.mongodb.net/?appName=mongo"
     mongodb_db_name: str = "cloudaudit"
 
     # Scheduling

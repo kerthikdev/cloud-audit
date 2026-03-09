@@ -1,5 +1,3 @@
 # Models package
-from app.models.scan import ScanSession, Resource, Violation, CostRecord, Recommendation
-from app.models.user import User
-
-__all__ = ["ScanSession", "Resource", "Violation", "CostRecord", "Recommendation", "User"]
+# Scan data is stored in-memory via app/core/store.py
+# User documents are stored in MongoDB via app/core/database.py
