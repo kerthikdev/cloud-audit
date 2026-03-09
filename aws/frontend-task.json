@@ -1,0 +1,28 @@
+{
+  "family": "cloudaudit-frontend-task",
+  "executionRoleArn": "arn:aws:iam::465774455611:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": "465774455611.dkr.ecr.ap-south-1.amazonaws.com/cloudaudit-frontend:1.0",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "hostPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "BACKEND_HOST",
+          "value": "13.200.39.163:8000"
+        }
+      ]
+    }
+  ]
+}
