@@ -4,7 +4,7 @@ import {
     Server, HardDrive, Database, Globe2, RefreshCw, WifiOff,
     AlertTriangle, DollarSign, Zap, Network, Camera,
     LoaderCircle, GitBranch, Shield, ShieldCheck, Activity,
-    FileDown, TrendingUp, Cloud, UserCheck,
+    FileDown, TrendingUp, Cloud, UserCheck, Globe, Cpu, MemoryStick,
 } from 'lucide-react'
 import { getSettings } from '../services/settingsService'
 import apiClient from '../services/apiClient'
@@ -24,6 +24,11 @@ import IAMTable from '../components/resources/IAMTable'
 import CloudFrontTable from '../components/resources/CloudFrontTable'
 import CloudWatchTable from '../components/resources/CloudWatchTable'
 import VPCTable from '../components/resources/VPCTable'
+import VPCTable from '../components/resources/VPCTable'
+import DynamoDBTable from '../components/resources/DynamoDBTable'
+import ElastiCacheTable from '../components/resources/ElastiCacheTable'
+import Route53Table from '../components/resources/Route53Table'
+import ECSTable from '../components/resources/ECSTable'
 import ViolationsPanel from '../components/violations/ViolationsPanel'
 import CostSummaryCard from '../components/cost/CostSummaryCard'
 import { Empty } from '../components/resources/shared'
@@ -61,6 +66,11 @@ const RESOURCE_TABS = [
     { key: 'CloudFront', label: 'CloudFront', icon: Cloud, color: '#0ea5e9' },
     { key: 'CloudWatch', label: 'CloudWatch', icon: Activity, color: '#10b981' },
     { key: 'VPC', label: 'VPC', icon: Network, color: '#06b6d4' },
+    { key: 'VPC', label: 'VPC', icon: Network, color: '#06b6d4' },
+    { key: 'DynamoDB', label: 'DynamoDB', icon: Database, color: '#f59e0b' },
+    { key: 'ElastiCache', label: 'Cache', icon: Globe, color: '#ec4899' },
+    { key: 'Route53', label: 'Route 53', icon: Globe2, color: '#10b981' },
+    { key: 'ECS', label: 'ECS', icon: Cpu, color: '#6366f1' },
 ]
 
 const VIEW_TABS = [
@@ -404,6 +414,12 @@ export default function Dashboard() {
                                         {activeTab === 'CloudFront' && <CloudFrontTable items={byType('CloudFront')} />}
                                         {activeTab === 'CloudWatch' && <CloudWatchTable items={byType('CloudWatch')} />}
                                         {activeTab === 'VPC' && <VPCTable items={byType('VPC')} />}
+                                        {activeTab === 'VPC' && <VPCTable items={byType('VPC')} />}
+                                        {activeTab === 'DynamoDB' && <DynamoDBTable items={byType('DynamoDB')} />}
+                                        {activeTab === 'ElastiCache' && <ElastiCacheTable items={byType('ElastiCache')} />}
+                                        {activeTab === 'Route53' && <Route53Table items={byType('Route53')} />}
+                                        {activeTab === 'ECS' && <ECSTable items={byType('ECS')} />}
+
                                     </div>
                                 )
                             )}

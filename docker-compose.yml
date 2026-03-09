@@ -1,0 +1,119 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Cloud Resource Audit Platform — Docker Compose
+# Compatible with AMD64 (x86) builds from ARM Macs
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MongoDB ───────────────────────────────────────────────────────────────
+  mongo:
+    image: mongo:7-jammy
+    platform: linux/amd64
+    container_name: cloudaudit-mongo
+    restart: unless-stopped
+
+    ports:
+      - "27017:27017"
+
+    volumes:
+      - mongo_data:/data/db
+
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+
+  # ── Backend (FastAPI + Uvicorn) ───────────────────────────────────────────
+  backend:
+    platform: linux/amd64
+
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    image: cloudaudit-backend:latest
+    container_name: cloudaudit-backend
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-cloudaudit}
+      DATA_DIR: /data
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - scan_data:/data
+
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 25s
+      retries: 3
+
+
+  # ── Frontend (Nginx serving Vite build) ───────────────────────────────────
+  frontend:
+    platform: linux/amd64
+
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_URL: ""   # empty = nginx proxy handles it at runtime
+    image: cloudaudit-frontend:latest
+    container_name: cloudaudit-frontend
+    restart: unless-stopped
+
+    environment:
+      BACKEND_HOST: backend:8000   # Docker Compose DNS → nginx template substitution
+
+    ports:
+      - "3000:80"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:80",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+
+# ── Named volumes ───────────────────────────────────────────────────────────
+volumes:
+
+  mongo_data:
+    driver: local
+
+  scan_data:
+    driver: local

@@ -1,42 +1,75 @@
+# services:
+#   # MongoDB is used for user storage (run locally or use MongoDB Atlas)
+#   # To run MongoDB in Docker instead of locally, uncomment this:
+#   # mongo:
+#   #   image: mongo:7
+#   #   restart: unless-stopped
+#   #   ports:
+#   #     - "27017:27017"
+#   #   volumes:
+#   #     - mongodata:/data/db
+
+#   backend:
+#     build:
+#       context: ../backend
+#       dockerfile: Dockerfile
+#     restart: unless-stopped
+#     ports:
+#       - "8000:8000"
+#     env_file:
+#       - ../.env
+#     environment:
+#       MONGODB_URI: mongodb://host.docker.internal:27017
+#       MONGODB_DB_NAME: cloudaudit
+#     # depends_on:
+#     #   - mongo  # uncomment if using Dockerized MongoDB above
+
+#   frontend:
+#     build:
+#       context: ../frontend
+#       dockerfile: Dockerfile
+#     restart: unless-stopped
+#     ports:
+#       - "3000:80"
+#     depends_on:
+#       - backend
+
+# # volumes:
+# #   mongodata:
+
+version: "3.9"
+
 services:
-  db:
-    image: postgres:16-alpine
+  mongo:
+    image: mongo:7
+    container_name: cloudaudit_mongo
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: cloudaudit
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - mongodata:/data/db
+    ports:
+      - "27017:27017"
 
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
+    container_name: cloudaudit_backend
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/cloudaudit
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: cloudaudit
     depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - ../backend/app:/app/app:ro # dev hot-reload mount (remove for prod)
+      - mongo
+    expose:
+      - "8000"
 
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+    container_name: cloudaudit_frontend
     restart: unless-stopped
     ports:
       - "3000:80"
@@ -44,4 +77,4 @@ services:
       - backend
 
 volumes:
-  pgdata:
+  mongodata:

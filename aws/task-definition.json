@@ -1,0 +1,50 @@
+{
+  "family": "cloudaudit-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::465774455611:role/cloudauditEcsExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "mongo",
+      "image": "mongo:7-jammy",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 27017
+        }
+      ]
+    },
+    {
+      "name": "backend",
+      "image": "465774455611.dkr.ecr.ap-south-1.amazonaws.com/cloudaudit-backend:1.0",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000
+        }
+      ],
+      "environment": [
+        {
+          "name": "MONGODB_URI",
+          "value": "mongodb://mongo:27017"
+        },
+        {
+          "name": "MONGODB_DB_NAME",
+          "value": "cloudaudit"
+        }
+      ]
+    },
+    {
+      "name": "frontend",
+      "image": "465774455611.dkr.ecr.ap-south-1.amazonaws.com/cloudaudit-frontend:1.1",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 80
+        }
+      ]
+    }
+  ]
+}

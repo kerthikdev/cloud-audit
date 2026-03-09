@@ -1,0 +1,43 @@
+{
+    "family": "cloudaudit-backend-task",
+    "networkMode": "awsvpc",
+    "executionRoleArn": "arn:aws:iam::465774455611:role/ecsTaskExecutionRole",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "512",
+    "memory": "1024",
+    
+    "containerDefinitions": [
+        {
+            "name": "backend",
+            "image": "465774455611.dkr.ecr.ap-south-1.amazonaws.com/cloudaudit-backend:1.0",
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "hostPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "environment": [
+                {
+                    "name": "MONGODB_URI",
+                    "value": "mongodb+srv://admin:admin@mongo.s2gflbj.mongodb.net/?appName=mongo"
+                },
+                {
+                    "name": "MONGODB_DB_NAME",
+                    "value": "cloudaudit"
+                },
+                {
+                    "name": "AWS_REGION",
+                    "value": "ap-south-1"
+                },
+                {
+                    "name": "SCAN_REGIONS",
+                    "value": "us-east-1,ap-south-1"
+                }
+            ]
+        }
+    ]
+}

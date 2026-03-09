@@ -1,0 +1,114 @@
+{
+  "_comment": "ECS Task Definition — Sidecar pattern: frontend (Nginx) + backend (FastAPI) in ONE task. Nginx at port 80 proxies /api/* to localhost:8000 (same network namespace). ALB routes all traffic to port 80.",
+
+  "family": "cloudaudit",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/cloudauditTaskRole",
+
+  "containerDefinitions": [
+
+    {
+      "_comment": "BACKEND — FastAPI. NOT exposed to ALB directly. Nginx (below) proxies to it on localhost.",
+      "name": "backend",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/cloudaudit-backend:latest",
+      "portMappings": [
+        { "containerPort": 8000, "protocol": "tcp" }
+      ],
+      "essential": true,
+
+      "environment": [
+        { "name": "APP_ENV",                     "value": "production" },
+        { "name": "DEBUG",                       "value": "false" },
+        { "name": "MONGODB_DB_NAME",             "value": "cloudaudit" },
+        { "name": "AWS_REGION",                  "value": "ap-south-1" },
+        { "name": "SCAN_REGIONS",                "value": "us-east-1,ap-south-1" },
+        { "name": "ACCESS_TOKEN_EXPIRE_MINUTES", "value": "120" },
+        { "name": "DATA_DIR",                    "value": "/tmp" },
+        { "name": "CORS_ORIGINS",                "value": "https://YOUR_ALB_OR_DOMAIN" }
+      ],
+
+      "secrets": [
+        {
+          "name": "MONGODB_URI",
+          "valueFrom": "arn:aws:ssm:ap-south-1:YOUR_ACCOUNT_ID:parameter/cloudaudit/production/mongodb_uri"
+        },
+        {
+          "name": "JWT_SECRET_KEY",
+          "valueFrom": "arn:aws:ssm:ap-south-1:YOUR_ACCOUNT_ID:parameter/cloudaudit/production/jwt_secret_key"
+        },
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "valueFrom": "arn:aws:ssm:ap-south-1:YOUR_ACCOUNT_ID:parameter/cloudaudit/production/aws_access_key_id"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "valueFrom": "arn:aws:ssm:ap-south-1:YOUR_ACCOUNT_ID:parameter/cloudaudit/production/aws_secret_access_key"
+        }
+      ],
+
+      "healthCheck": {
+        "command": ["CMD", "python", "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 30
+      },
+
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cloudaudit",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "backend"
+        }
+      }
+    },
+
+    {
+      "_comment": "FRONTEND — Nginx. ALB routes :80 here. Proxies /api/* to localhost:8000 (backend sidecar).",
+      "name": "frontend",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/cloudaudit-frontend:latest",
+      "portMappings": [
+        { "containerPort": 80, "protocol": "tcp" }
+      ],
+      "essential": true,
+
+      "environment": [
+        {
+          "name": "BACKEND_HOST",
+          "value": "127.0.0.1:8000"
+        }
+      ],
+
+      "dependsOn": [
+        {
+          "containerName": "backend",
+          "condition": "HEALTHY"
+        }
+      ],
+
+      "healthCheck": {
+        "command": ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      },
+
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cloudaudit",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "frontend"
+        }
+      }
+    }
+
+  ]
+}

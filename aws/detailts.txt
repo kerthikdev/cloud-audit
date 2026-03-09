@@ -1,0 +1,3 @@
+export VPC_ID=vpc-010bcfacca9c43b3b 
+export IGW_ID=igw-0922d1c52651082ee
+ "Arn": "arn:aws:iam::465774455611:role/cloudauditEcsExecutionRole",

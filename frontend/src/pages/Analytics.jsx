@@ -6,7 +6,7 @@
  *   - 30/60/90-day cost forecasting
  */
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, DollarSign, Tag, AlertTriangle, BarChart2, RefreshCw } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Tag, AlertTriangle, BarChart2, RefreshCw, Flame, Users } from 'lucide-react'
 import apiClient from '../services/apiClient'
 
 /* ── tiny SVG chart helpers ── */
@@ -91,6 +91,8 @@ export default function Analytics() {
     const [forecast, setForecast] = useState(null)
     const [trends, setTrends] = useState(null)
     const [tags, setTags] = useState(null)
+    const [topResources, setTopResources] = useState(null)
+    const [topOwners, setTopOwners] = useState(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
 
@@ -98,14 +100,18 @@ export default function Analytics() {
         setLoading(true)
         setError(null)
         try {
-            const [fRes, tRes, tagRes] = await Promise.all([
+            const [fRes, tRes, tagRes, trRes, owRes] = await Promise.all([
                 apiClient.get('/analytics/forecast'),
                 apiClient.get('/analytics/trends'),
                 apiClient.get('/analytics/tags').catch(() => ({ data: null })),
+                apiClient.get('/analytics/top-resources').catch(() => ({ data: null })),
+                apiClient.get('/analytics/top-owners').catch(() => ({ data: null })),
             ])
             setForecast(fRes.data)
             setTrends(tRes.data)
             setTags(tagRes.data)
+            setTopResources(trRes.data)
+            setTopOwners(owRes.data)
         } catch (e) {
             setError(e.response?.data?.detail || e.message)
         } finally {
@@ -316,6 +322,139 @@ export default function Analytics() {
                                 </div>
                             )
                         })}
+                    </div>
+                </Card>
+            )}
+
+            {/* ── Top 20 Riskiest Resources ── */}
+            {topResources?.resources?.length > 0 && (
+                <Card
+                    title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Flame size={16} color="#ef4444" /> Top {topResources.shown} Riskiest Resources</span>}
+                    subtitle={`From latest scan · ${topResources.total} total resources`}
+                    style={{ marginTop: 20 }}
+                >
+                    <div className="table-wrapper" style={{ maxHeight: 480, overflowY: 'auto' }}>
+                        <table>
+                            <thead><tr>
+                                <th>#</th>
+                                <th>Resource ID</th>
+                                <th>Type</th>
+                                <th>Name</th>
+                                <th>Region</th>
+                                <th>State</th>
+                                <th>Risk Score</th>
+                                <th>Violations</th>
+                            </tr></thead>
+                            <tbody>
+                                {topResources.resources.map((r, i) => {
+                                    const riskColor = r.risk_score >= 80 ? '#ef4444' : r.risk_score >= 50 ? '#f97316' : r.risk_score >= 25 ? '#f59e0b' : '#10b981'
+                                    const typeColor = TYPE_COLORS[r.resource_type] || '#6366f1'
+                                    return (
+                                        <tr key={r.resource_id}>
+                                            <td style={{ color: '#64748b', fontWeight: 700 }}>{i + 1}</td>
+                                            <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.resource_id}</td>
+                                            <td>
+                                                <span style={{ background: `${typeColor}20`, color: typeColor, padding: '2px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700 }}>
+                                                    {r.resource_type}
+                                                </span>
+                                            </td>
+                                            <td style={{ fontSize: 12, color: '#cbd5e1', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {r.name !== r.resource_id ? r.name : '—'}
+                                            </td>
+                                            <td style={{ fontSize: 11, color: '#94a3b8' }}>{r.region}</td>
+                                            <td style={{ fontSize: 11 }}>
+                                                <span style={{ color: r.state === 'running' || r.state === 'available' ? '#10b981' : '#f59e0b' }}>
+                                                    {r.state}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <div style={{ width: 60, height: 6, background: 'rgba(255,255,255,0.07)', borderRadius: 3 }}>
+                                                        <div style={{ width: `${Math.min(r.risk_score, 100)}%`, height: '100%', borderRadius: 3, background: riskColor }} />
+                                                    </div>
+                                                    <span style={{ color: riskColor, fontWeight: 700, fontSize: 13 }}>{r.risk_score}</span>
+                                                </div>
+                                            </td>
+                                            <td style={{ color: r.violation_count > 0 ? '#f59e0b' : '#64748b', fontWeight: r.violation_count > 0 ? 700 : 400 }}>
+                                                {r.violation_count}
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
+
+            {/* ── Top 10 Resource Owners ── */}
+            {topOwners?.owners?.length > 0 && (
+                <Card
+                    title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Users size={16} color="#6366f1" /> Top {topOwners.owners.length} Resource Owners</span>}
+                    subtitle={`${topOwners.total_owners} unique owners across ${topOwners.total_resources} resources · Grouped by Owner / Team / Environment tag`}
+                    style={{ marginTop: 20 }}
+                >
+                    <div className="table-wrapper" style={{ maxHeight: 440, overflowY: 'auto' }}>
+                        <table>
+                            <thead><tr>
+                                <th>#</th>
+                                <th>Owner / Team</th>
+                                <th>Resources</th>
+                                <th>Violations</th>
+                                <th>Critical</th>
+                                <th>Top Resource Types</th>
+                                <th>Regions</th>
+                            </tr></thead>
+                            <tbody>
+                                {topOwners.owners.map((o, i) => {
+                                    const maxCount = topOwners.owners[0]?.resource_count || 1
+                                    const barPct = (o.resource_count / maxCount) * 100
+                                    return (
+                                        <tr key={o.owner}>
+                                            <td style={{ color: '#64748b', fontWeight: 700 }}>{i + 1}</td>
+                                            <td>
+                                                <span style={{
+                                                    fontWeight: 700, fontSize: 13,
+                                                    color: o.is_untagged ? '#f87171' : '#e2e8f0',
+                                                    display: 'flex', alignItems: 'center', gap: 5,
+                                                }}>
+                                                    {o.is_untagged && <Tag size={11} color="#f87171" />}
+                                                    {o.owner}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <div style={{ width: 80, height: 7, background: 'rgba(255,255,255,0.07)', borderRadius: 3 }}>
+                                                        <div style={{ width: `${barPct}%`, height: '100%', borderRadius: 3, background: o.is_untagged ? '#ef4444' : '#6366f1', transition: 'width 0.8s ease' }} />
+                                                    </div>
+                                                    <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{o.resource_count}</span>
+                                                </div>
+                                            </td>
+                                            <td style={{ color: o.violation_count > 0 ? '#f59e0b' : '#64748b', fontWeight: o.violation_count > 0 ? 700 : 400 }}>
+                                                {o.violation_count}
+                                            </td>
+                                            <td style={{ color: o.critical_count > 0 ? '#ef4444' : '#64748b', fontWeight: o.critical_count > 0 ? 800 : 400 }}>
+                                                {o.critical_count > 0 ? `🔴 ${o.critical_count}` : '—'}
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                                    {o.top_types.map(t => (
+                                                        <span key={t.type} style={{
+                                                            background: `${TYPE_COLORS[t.type] || '#6366f1'}22`,
+                                                            color: TYPE_COLORS[t.type] || '#818cf8',
+                                                            fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600,
+                                                        }}>
+                                                            {t.type} ×{t.count}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            <td style={{ fontSize: 11, color: '#94a3b8' }}>{o.regions.join(', ')}</td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 </Card>
             )}
